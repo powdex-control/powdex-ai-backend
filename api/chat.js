@@ -1,9 +1,9 @@
 // =====================================================
-// Backend do POWDEX AI.
-// Único responsável por falar com a OpenAI — a API key nunca
+// Backend do POWDEX AI (usando OpenRouter).
+// Único responsável por falar com a IA — a API key nunca
 // chega ao navegador do usuário.
 // =====================================================
-const { OPENAI_API_KEY, OPENAI_MODEL } = require("../config");
+const { OPENROUTER_API_KEY, OPENROUTER_MODEL } = require("../config");
 
 const SYSTEM_PROMPT =
   "Você é o assistente inteligente do POWDEX CONTROL, um sistema desenvolvido para " +
@@ -25,8 +25,8 @@ module.exports = async function chatHandler(req, res){
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
 
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === "COLOQUE_SUA_API_KEY_AQUI"){
-    return res.status(500).json({ error: "Backend sem OPENAI_API_KEY configurada." });
+  if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "COLOQUE_SUA_OPENROUTER_API_KEY_AQUI"){
+    return res.status(500).json({ error: "Backend sem OPENROUTER_API_KEY configurada." });
   }
 
   try {
@@ -42,27 +42,29 @@ module.exports = async function chatHandler(req, res){
       return res.status(400).json({ error: "Nenhuma mensagem válida enviada." });
     }
 
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer " + OPENAI_API_KEY
+        "Authorization": "Bearer " + OPENROUTER_API_KEY,
+        "HTTP-Referer": "https://powdex-control.github.io",
+        "X-Title": "POWDEX AI"
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: OPENROUTER_MODEL,
         messages: [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed],
         temperature: 0.5,
         max_tokens: 700
       })
     });
 
-    if (!openaiRes.ok){
-      const errText = await openaiRes.text();
-      console.error("Erro da OpenAI:", openaiRes.status, errText);
+    if (!orRes.ok){
+      const errText = await orRes.text();
+      console.error("Erro do OpenRouter:", orRes.status, errText);
       return res.status(502).json({ error: "Não foi possível conectar à IA no momento." });
     }
 
-    const data = await openaiRes.json();
+    const data = await orRes.json();
     const reply = data && data.choices && data.choices[0] && data.choices[0].message
       ? data.choices[0].message.content
       : "";
