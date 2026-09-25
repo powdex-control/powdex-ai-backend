@@ -1,0 +1,18 @@
+{
+  "name": "powdex-ai-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend que protege a OPENAI_API_KEY e fala com a OpenAI para o POWDEX AI.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
