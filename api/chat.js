@@ -93,7 +93,8 @@ module.exports = async function chatHandler(req, res){
         model: OPENROUTER_MODEL,
         messages: [{ role: "system", content: fullSystemPrompt }, ...trimmed],
         temperature: 0.4,
-        max_tokens: 900
+        max_tokens: 900,
+        reasoning: { exclude: true }
       })
     });
 
@@ -104,9 +105,16 @@ module.exports = async function chatHandler(req, res){
     }
 
     const data = await orRes.json();
-    const reply = data && data.choices && data.choices[0] && data.choices[0].message
+    let reply = data && data.choices && data.choices[0] && data.choices[0].message
       ? data.choices[0].message.content
       : "";
+
+    // Proteção extra: alguns modelos gratuitos de "raciocínio" às vezes vazam o
+    // pensamento interno mesmo pedindo para excluir — remove blocos comuns desse tipo.
+    if (reply){
+      reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+      reply = reply.replace(/^(analysis|reasoning|thinking)[:\s][\s\S]*?\n\n/i, "").trim();
+    }
 
     return res.status(200).json({ reply });
   } catch (err){
