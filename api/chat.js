@@ -3,7 +3,7 @@
 // Único responsável por falar com a IA — a API key nunca
 // chega ao navegador do usuário.
 // =====================================================
-const { OPENROUTER_API_KEY, OPENROUTER_MODEL } = require("../config");
+const { OPENROUTER_API_KEY, OPENROUTER_MODELS } = require("../config");
 
 // Descrição completa e real do funcionamento do POWDEX CONTROL.
 // Isso é o que permite a IA responder "como o app funciona" com precisão,
@@ -61,6 +61,9 @@ module.exports = async function chatHandler(req, res){
   if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "COLOQUE_SUA_OPENROUTER_API_KEY_AQUI"){
     return res.status(500).json({ error: "Backend sem OPENROUTER_API_KEY configurada." });
   }
+  if (!Array.isArray(OPENROUTER_MODELS) || !OPENROUTER_MODELS.length){
+    return res.status(500).json({ error: "Backend sem OPENROUTER_MODELS configurado." });
+  }
 
   try {
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
@@ -90,7 +93,7 @@ module.exports = async function chatHandler(req, res){
         "X-Title": "POWDEX AI"
       },
       body: JSON.stringify({
-        model: OPENROUTER_MODEL,
+        models: OPENROUTER_MODELS,
         messages: [{ role: "system", content: fullSystemPrompt }, ...trimmed],
         temperature: 0.4,
         max_tokens: 900,
@@ -114,6 +117,15 @@ module.exports = async function chatHandler(req, res){
     if (reply){
       reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
       reply = reply.replace(/^(analysis|reasoning|thinking)[:\s][\s\S]*?\n\n/i, "").trim();
+    }
+
+    // Alguns modelos gratuitos do sorteio são classificadores de segurança,
+    // não modelos de conversa — se a "resposta" for só um veredito desse
+    // tipo, trata como falha para o usuário tentar de novo (evita mostrar
+    // algo sem sentido tipo "User Safety: safe").
+    if (!reply || /^\s*(user safety|response safety)\s*:/im.test(reply)){
+      console.error("Resposta inválida (parece veredito de moderação):", reply);
+      return res.status(502).json({ error: "Não foi possível conectar à IA no momento." });
     }
 
     return res.status(200).json({ reply });
