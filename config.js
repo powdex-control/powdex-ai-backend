@@ -7,7 +7,8 @@
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "COLOQUE_SUA_OPENROUTER_API_KEY_AQUI";
 
 // Único lugar do projeto onde o modelo é definido.
-// "openrouter/free" escolhe automaticamente um modelo gratuito disponível.
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openrouter/free";
+// Modelo fixo e estável (evita cair em modelos de moderação/raciocínio
+// que às vezes aparecem no sorteio do roteador "openrouter/free").
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b:free";
 
 module.exports = { OPENROUTER_API_KEY, OPENROUTER_MODEL };
