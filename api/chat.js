@@ -4,7 +4,7 @@
 // chega ao navegador do usuário.
 // =====================================================
 const { OPENROUTER_API_KEY, OPENROUTER_MODELS } = require("../config");
-a
+
 // Descrição completa e real do funcionamento do POWDEX CONTROL.
 // Isso é o que permite a IA responder "como o app funciona" com precisão,
 // em vez de só falar sobre o propósito geral do sistema.
