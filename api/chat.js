@@ -3,7 +3,7 @@
 // Único responsável por falar com a IA — a API key nunca
 // chega ao navegador do usuário.
 // =====================================================
-const { OPENROUTER_API_KEY, OPENROUTER_MODELS } = require("../config");
+const { OPENROUTER_API_KEY, OPENROUTER_MODEL } = require("../config");
 
 // Descrição completa e real do funcionamento do POWDEX CONTROL.
 // Isso é o que permite a IA responder "como o app funciona" com precisão,
@@ -49,6 +49,55 @@ COMO RESPONDER:
 
 const MAX_HISTORY_MESSAGES = 16;
 const MAX_CONTEXT_CHARS = 4000;
+const MAX_ATTEMPTS = 3; // o roteador "openrouter/free" sorteia um modelo diferente a cada tentativa
+
+function looksInvalid(reply){
+  if (!reply || !reply.trim()) return true;
+  // Alguns modelos do sorteio são classificadores de segurança, não modelos
+  // de conversa — a "resposta" deles é só um veredito, não uma resposta real.
+  if (/^\s*(user safety|response safety)\s*:/im.test(reply)) return true;
+  return false;
+}
+
+function cleanReply(raw){
+  let reply = raw || "";
+  // Proteção extra: alguns modelos de "raciocínio" vazam o pensamento interno
+  // mesmo pedindo para excluir — remove blocos comuns desse tipo.
+  reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  reply = reply.replace(/^(analysis|reasoning|thinking)[:\s][\s\S]*?\n\n/i, "").trim();
+  return reply;
+}
+
+async function callOpenRouter(messages){
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + OPENROUTER_API_KEY,
+      "HTTP-Referer": "https://powdex-control.github.io",
+      "X-Title": "POWDEX AI"
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages,
+      temperature: 0.4,
+      max_tokens: 900,
+      reasoning: { exclude: true }
+    })
+  });
+
+  if (!res.ok){
+    const errText = await res.text();
+    console.error("Erro do OpenRouter:", res.status, errText);
+    return null;
+  }
+
+  const data = await res.json();
+  const raw = data && data.choices && data.choices[0] && data.choices[0].message
+    ? data.choices[0].message.content
+    : "";
+  return cleanReply(raw);
+}
 
 module.exports = async function chatHandler(req, res){
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -60,9 +109,6 @@ module.exports = async function chatHandler(req, res){
 
   if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "COLOQUE_SUA_OPENROUTER_API_KEY_AQUI"){
     return res.status(500).json({ error: "Backend sem OPENROUTER_API_KEY configurada." });
-  }
-  if (!Array.isArray(OPENROUTER_MODELS) || !OPENROUTER_MODELS.length){
-    return res.status(500).json({ error: "Backend sem OPENROUTER_MODELS configurado." });
   }
 
   try {
@@ -84,47 +130,19 @@ module.exports = async function chatHandler(req, res){
       ? SYSTEM_PROMPT + "\n\n--- Dados atuais do sistema (use estes dados reais; não invente números) ---\n" + context
       : SYSTEM_PROMPT;
 
-    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + OPENROUTER_API_KEY,
-        "HTTP-Referer": "https://powdex-control.github.io",
-        "X-Title": "POWDEX AI"
-      },
-      body: JSON.stringify({
-        models: OPENROUTER_MODELS,
-        messages: [{ role: "system", content: fullSystemPrompt }, ...trimmed],
-        temperature: 0.4,
-        max_tokens: 900,
-        reasoning: { exclude: true }
-      })
-    });
+    const messages = [{ role: "system", content: fullSystemPrompt }, ...trimmed];
 
-    if (!orRes.ok){
-      const errText = await orRes.text();
-      console.error("Erro do OpenRouter:", orRes.status, errText);
-      return res.status(502).json({ error: "Não foi possível conectar à IA no momento." });
+    let reply = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
+      const result = await callOpenRouter(messages);
+      if (!looksInvalid(result)){
+        reply = result;
+        break;
+      }
+      console.error(`Tentativa ${attempt} descartada (resposta inválida/vazia).`);
     }
 
-    const data = await orRes.json();
-    let reply = data && data.choices && data.choices[0] && data.choices[0].message
-      ? data.choices[0].message.content
-      : "";
-
-    // Proteção extra: alguns modelos gratuitos de "raciocínio" às vezes vazam o
-    // pensamento interno mesmo pedindo para excluir — remove blocos comuns desse tipo.
-    if (reply){
-      reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-      reply = reply.replace(/^(analysis|reasoning|thinking)[:\s][\s\S]*?\n\n/i, "").trim();
-    }
-
-    // Alguns modelos gratuitos do sorteio são classificadores de segurança,
-    // não modelos de conversa — se a "resposta" for só um veredito desse
-    // tipo, trata como falha para o usuário tentar de novo (evita mostrar
-    // algo sem sentido tipo "User Safety: safe").
-    if (!reply || /^\s*(user safety|response safety)\s*:/im.test(reply)){
-      console.error("Resposta inválida (parece veredito de moderação):", reply);
+    if (!reply){
       return res.status(502).json({ error: "Não foi possível conectar à IA no momento." });
     }
 
